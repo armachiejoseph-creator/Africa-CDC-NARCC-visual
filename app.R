@@ -142,7 +142,7 @@ server <- function(input, output, session) {
   output$val_ind   <- renderText({ filtered_metrics()$ind_sum })
   
   # Render Gauges
-  output$gauge_burn   <- renderPlotly({ create_cdc_gauge(filtered_metrics()$burn_avg, "Burn Rate", cdc_maroon, 90) })
+  output$gauge_burn   <- renderPlotly({ create_cdc_gauge(filtered_metrics()$burn_avg, "Burn Rate", cdc_maroon, 25) })
   output$gauge_comp   <- renderPlotly({ create_cdc_gauge(filtered_metrics()$comp_avg, "Completion Rate", cdc_teal, 90) })
   output$gauge_q_perf <- renderPlotly({ create_cdc_gauge(filtered_metrics()$q_avg, "Q1 Performance", cdc_gold, 90) })
   output$gauge_ytd    <- renderPlotly({ create_cdc_gauge(filtered_metrics()$y_avg, "YTD Performance", cdc_teal, 25) })
