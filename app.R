@@ -107,12 +107,17 @@ server <- function(input, output) {
   })
   
   output$epiPlot <- renderPlot({
-    sim_data() %>% pivot_longer(-time, names_to = "compartment", values_to = "count") %>%
+    sim_data() %>% 
+      pivot_longer(
+        cols = -time, 
+        names_to = "compartment", 
+        values_to = "count"
+      ) %>%
       filter(compartment %in% c("I", "Q", "H")) %>% 
       ggplot(aes(x = time, y = count, color = compartment)) +
-      geom_line(size = 1.2) + theme_minimal() + labs(y = "Count", x = "Days")
-  })
-  
+      geom_line(size = 1.2) + 
+      theme_minimal()
+  })  
   output$guide_content <- renderUI({
     withMathJax(includeMarkdown("guide.Rmd"))
   })
