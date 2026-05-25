@@ -3,6 +3,7 @@ library(shinydashboard)
 library(deSolve)
 library(ggplot2)
 library(tidyr)
+library(dplyr)
 library(markdown)
 
 # 1. Model Definition
@@ -107,17 +108,21 @@ server <- function(input, output) {
   })
   
   output$epiPlot <- renderPlot({
-    sim_data() %>% 
-      pivot_longer(
-        cols = -time, 
-        names_to = "compartment", 
-        values_to = "count"
-      ) %>%
-      filter(compartment %in% c("I", "Q", "H")) %>% 
-      ggplot(aes(x = time, y = count, color = compartment)) +
-      geom_line(size = 1.2) + 
-      theme_minimal()
-  })  
+    # Use fully qualified calls and ensure the data object is explicitly handled
+    plot_df <- tidyr::pivot_longer(
+      data = sim_data(), 
+      cols = -time, 
+      names_to = "compartment", 
+      values_to = "count"
+    )
+    
+    # Perform filtering and plotting using the explicit data frame
+    dplyr::filter(plot_df, compartment %in% c("I", "Q", "H")) %>% 
+      ggplot2::ggplot(aes(x = time, y = count, color = compartment)) +
+      ggplot2::geom_line(size = 1.2) + 
+      ggplot2::theme_minimal()
+  })
+  
   output$guide_content <- renderUI({
     withMathJax(includeMarkdown("guide.Rmd"))
   })
