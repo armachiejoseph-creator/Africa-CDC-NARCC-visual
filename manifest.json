@@ -773,6 +773,36 @@
         "RemoteSha": "1.18.2.1"
       }
     },
+    "deSolve": {
+      "Source": "CRAN",
+      "Repository": "http://rspm/default/latest",
+      "description": {
+        "Package": "deSolve",
+        "Version": "1.42",
+        "Title": "Solvers for Initial Value Problems of Differential Equations\n('ODE', 'DAE', 'DDE')",
+        "Authors@R": "c(person(\"Karline\",\"Soetaert\", role = c(\"aut\"), \n                     email = \"karline.soetaert@nioz.nl\",\n                     comment = c(ORCID = \"0000-0003-4603-7100\")),\n             person(\"Thomas\",\"Petzoldt\", role = c(\"aut\", \"cre\"),\n                     email = \"thomas.petzoldt@tu-dresden.de\",\n                     comment = c(ORCID = \"0000-0002-4951-6468\")),\n             person(\"R. Woodrow\",\"Setzer\", role = c(\"aut\"),\n                     email = \"setzer.woodrow@epa.gov\",\n                     comment = c(ORCID = \"0000-0002-6709-9186\")),\n             person(\"Peter N.\",\"Brown\", role = \"ctb\", \n                     comment = \"files ddaspk.f, dvode.f, zvode.f\"),\n             person(\"George D.\",\"Byrne\", role = \"ctb\", \n                     comment = \"files dvode.f, zvode.f\"),\n             person(\"Ernst\",\"Hairer\", role = \"ctb\", \n                     comment = \"files radau5.f, radau5a\"),\n             person(\"Alan C.\",\"Hindmarsh\", role = \"ctb\", \n                     comment = \"files ddaspk.f, dlsode.f, dvode.f, zvode.f, opdkmain.f, opdka1.f\"),\n             person(\"Cleve\",\"Moler\", role = \"ctb\", \n                     comment = \"file dlinpck.f\"),\n             person(\"Linda R.\",\"Petzold\", role = \"ctb\", \n                     comment = \"files ddaspk.f, dlsoda.f\"),\n             person(\"Youcef\", \"Saad\", role = \"ctb\", \n                     comment = \"file dsparsk.f\"),\n             person(\"Clement W.\",\"Ulrich\", role = \"ctb\", \n                     comment = \"file ddaspk.f\")\n           )",
+        "Author": "Karline Soetaert [aut] (ORCID: <https://orcid.org/0000-0003-4603-7100>),\n  Thomas Petzoldt [aut, cre] (ORCID:\n    <https://orcid.org/0000-0002-4951-6468>),\n  R. Woodrow Setzer [aut] (ORCID:\n    <https://orcid.org/0000-0002-6709-9186>),\n  Peter N. Brown [ctb] (files ddaspk.f, dvode.f, zvode.f),\n  George D. Byrne [ctb] (files dvode.f, zvode.f),\n  Ernst Hairer [ctb] (files radau5.f, radau5a),\n  Alan C. Hindmarsh [ctb] (files ddaspk.f, dlsode.f, dvode.f, zvode.f,\n    opdkmain.f, opdka1.f),\n  Cleve Moler [ctb] (file dlinpck.f),\n  Linda R. Petzold [ctb] (files ddaspk.f, dlsoda.f),\n  Youcef Saad [ctb] (file dsparsk.f),\n  Clement W. Ulrich [ctb] (file ddaspk.f)",
+        "Maintainer": "Thomas Petzoldt <thomas.petzoldt@tu-dresden.de>",
+        "Depends": "R (>= 3.3.0)",
+        "Imports": "methods, graphics, grDevices, stats",
+        "Suggests": "scatterplot3d, nlme, FME",
+        "Description": "Functions that solve initial value problems of a system\n        of first-order ordinary differential equations ('ODE'), of\n        partial differential equations ('PDE'), of differential\n        algebraic equations ('DAE'), and of delay differential\n        equations.  The functions provide an interface to the FORTRAN\n        functions 'lsoda', 'lsodar', 'lsode', 'lsodes' of the 'ODEPACK'\n        collection, to the FORTRAN functions 'dvode', 'zvode' and 'daspk'\n        and a C-implementation of solvers of the 'Runge-Kutta' family with\n        fixed or variable time steps.  The package contains routines\n        designed for solving 'ODEs' resulting from 1-D, 2-D and 3-D\n        partial differential equations ('PDE') that have been converted\n        to 'ODEs' by numerical differencing.",
+        "License": "GPL (>= 2)",
+        "URL": "https://github.com/tpetzoldt/deSolve/",
+        "LazyData": "yes",
+        "NeedsCompilation": "yes",
+        "Packaged": "2026-03-19 21:12:12 UTC; thpe",
+        "Repository": "RSPM",
+        "Date/Publication": "2026-03-20 06:10:37 UTC",
+        "Encoding": "UTF-8",
+        "Built": "R 4.5.0; x86_64-pc-linux-gnu; 2026-03-21 04:43:41 UTC; unix",
+        "RemoteType": "standard",
+        "RemotePkgRef": "deSolve",
+        "RemoteRef": "deSolve",
+        "RemoteRepos": "http://rspm/default/latest",
+        "RemoteSha": "1.42"
+      }
+    },
     "digest": {
       "Source": "CRAN",
       "Repository": "http://rspm/default/latest",
@@ -1749,6 +1779,39 @@
         "RemoteSha": "1.0.5"
       }
     },
+    "litedown": {
+      "Source": "CRAN",
+      "Repository": "http://rspm/default/latest",
+      "description": {
+        "Package": "litedown",
+        "Type": "Package",
+        "Title": "A Lightweight Version of R Markdown",
+        "Version": "0.9",
+        "Authors@R": "c(\n    person(\"Yihui\", \"Xie\", role = c(\"aut\", \"cre\"), email = \"xie@yihui.name\", comment = c(ORCID = \"0000-0003-0645-5666\", URL = \"https://yihui.org\")),\n    person(\"Tim\", \"Taylor\", role = \"ctb\", comment = c(ORCID = \"0000-0002-8587-7113\")),\n    person()\n    )",
+        "Description": "Render R Markdown to Markdown (without using 'knitr'), and Markdown\n    to lightweight HTML or 'LaTeX' documents with the 'commonmark' package (instead\n    of 'Pandoc'). Some missing Markdown features in 'commonmark' are also\n    supported, such as raw HTML or 'LaTeX' blocks, 'LaTeX' math, superscripts,\n    subscripts, footnotes, element attributes, and appendices,\n    but not all 'Pandoc' Markdown features are (or will be) supported. With\n    additional JavaScript and CSS, you can also create HTML slides and articles.\n    This package can be viewed as a trimmed-down version of R Markdown and\n    'knitr'. It does not aim at rich Markdown features or a large variety of\n    output formats (the primary formats are HTML and 'LaTeX'). Book and website\n    projects of multiple input documents are also supported.",
+        "Depends": "R (>= 3.2.0)",
+        "Imports": "utils, commonmark (>= 2.0.0), xfun (>= 0.55)",
+        "Suggests": "rbibutils, rstudioapi, tinytex",
+        "License": "MIT + file LICENSE",
+        "URL": "https://github.com/yihui/litedown",
+        "BugReports": "https://github.com/yihui/litedown/issues",
+        "VignetteBuilder": "litedown",
+        "RoxygenNote": "7.3.3",
+        "Encoding": "UTF-8",
+        "NeedsCompilation": "no",
+        "Packaged": "2025-12-18 16:42:41 UTC; yihui",
+        "Author": "Yihui Xie [aut, cre] (ORCID: <https://orcid.org/0000-0003-0645-5666>,\n    URL: https://yihui.org),\n  Tim Taylor [ctb] (ORCID: <https://orcid.org/0000-0002-8587-7113>)",
+        "Maintainer": "Yihui Xie <xie@yihui.name>",
+        "Repository": "RSPM",
+        "Date/Publication": "2025-12-18 17:50:02 UTC",
+        "Built": "R 4.5.0; ; 2025-12-19 04:28:13 UTC; unix",
+        "RemoteType": "standard",
+        "RemotePkgRef": "litedown",
+        "RemoteRef": "litedown",
+        "RemoteRepos": "http://rspm/default/latest",
+        "RemoteSha": "0.9"
+      }
+    },
     "magrittr": {
       "Source": "CRAN",
       "Repository": "http://rspm/default/latest",
@@ -1781,6 +1844,38 @@
         "RemoteRef": "magrittr",
         "RemoteRepos": "http://rspm/default/latest",
         "RemoteSha": "2.0.4"
+      }
+    },
+    "markdown": {
+      "Source": "CRAN",
+      "Repository": "http://rspm/default/latest",
+      "description": {
+        "Package": "markdown",
+        "Type": "Package",
+        "Title": "Render Markdown with 'commonmark'",
+        "Version": "2.0",
+        "Authors@R": "c(\n   person(\"Yihui\", \"Xie\", role = c(\"aut\", \"cre\"), email = \"xie@yihui.name\", comment = c(ORCID = \"0000-0003-0645-5666\")),\n   person(\"JJ\", \"Allaire\", role = \"aut\"),\n   person(\"Jeffrey\", \"Horner\", role = \"aut\"),\n   person(\"Henrik\", \"Bengtsson\", role = \"ctb\"),\n   person(\"Jim\", \"Hester\", role = \"ctb\"),\n   person(\"Yixuan\", \"Qiu\", role = \"ctb\"),\n   person(\"Kohske\", \"Takahashi\", role = \"ctb\"),\n   person(\"Adam\", \"November\", role = \"ctb\"),\n   person(\"Nacho\", \"Caballero\", role = \"ctb\"),\n   person(\"Jeroen\", \"Ooms\", role = \"ctb\"),\n   person(\"Thomas\", \"Leeper\", role = \"ctb\"),\n   person(\"Joe\", \"Cheng\", role = \"ctb\"),\n   person(\"Andrzej\", \"Oles\", role = \"ctb\"),\n   person(given = \"Posit Software, PBC\", role = c(\"cph\", \"fnd\"))\n   )",
+        "Description": "Render Markdown to full and lightweight HTML/LaTeX documents with\n    the 'commonmark' package. This package has been superseded by 'litedown'.",
+        "Depends": "R (>= 2.11.1)",
+        "Imports": "utils, xfun, litedown (>= 0.6)",
+        "Suggests": "knitr, rmarkdown (>= 2.18), yaml, RCurl",
+        "License": "MIT + file LICENSE",
+        "URL": "https://github.com/rstudio/markdown",
+        "BugReports": "https://github.com/rstudio/markdown/issues",
+        "RoxygenNote": "7.3.2",
+        "Encoding": "UTF-8",
+        "NeedsCompilation": "no",
+        "Packaged": "2025-03-23 17:06:26 UTC; runner",
+        "Author": "Yihui Xie [aut, cre] (<https://orcid.org/0000-0003-0645-5666>),\n  JJ Allaire [aut],\n  Jeffrey Horner [aut],\n  Henrik Bengtsson [ctb],\n  Jim Hester [ctb],\n  Yixuan Qiu [ctb],\n  Kohske Takahashi [ctb],\n  Adam November [ctb],\n  Nacho Caballero [ctb],\n  Jeroen Ooms [ctb],\n  Thomas Leeper [ctb],\n  Joe Cheng [ctb],\n  Andrzej Oles [ctb],\n  Posit Software, PBC [cph, fnd]",
+        "Maintainer": "Yihui Xie <xie@yihui.name>",
+        "Repository": "RSPM",
+        "Date/Publication": "2025-03-23 19:30:03 UTC",
+        "Built": "R 4.5.0; ; 2025-04-05 03:28:13 UTC; unix",
+        "RemoteType": "standard",
+        "RemotePkgRef": "markdown",
+        "RemoteRef": "markdown",
+        "RemoteRepos": "http://rspm/default/latest",
+        "RemoteSha": "2.0"
       }
     },
     "memoise": {
@@ -2492,6 +2587,36 @@
         "RemoteSha": "1.13.0"
       }
     },
+    "shinydashboard": {
+      "Source": "CRAN",
+      "Repository": "http://rspm/default/latest",
+      "description": {
+        "Package": "shinydashboard",
+        "Title": "Create Dashboards with 'Shiny'",
+        "Version": "0.7.3",
+        "Authors@R": "c(\n    person(\"Winston\", \"Chang\", , \"winston@posit.co\", role = c(\"aut\", \"cre\")),\n    person(\"Barbara\", \"Borges Ribeiro\", role = \"aut\"),\n    person(, \"Posit Software, PBC\", role = \"cph\"),\n    person(, \"Almasaeed Studio\", role = c(\"ctb\", \"cph\"),\n           comment = \"AdminLTE theme for Bootstrap\"),\n    person(, \"Adobe Systems Incorporated\", role = c(\"ctb\", \"cph\"),\n           comment = \"Source Sans Pro font\")\n  )",
+        "Description": "Create dashboards with 'Shiny'. This package provides a theme\n    on top of 'Shiny', making it easy to create attractive dashboards.",
+        "License": "MIT + file LICENSE",
+        "URL": "https://rstudio.github.io/shinydashboard/,\nhttps://github.com/rstudio/shinydashboard",
+        "BugReports": "https://github.com/rstudio/shinydashboard/issues",
+        "Depends": "R (>= 3.0)",
+        "Imports": "htmltools (>= 0.2.6), promises, shiny (>= 1.0.0), utils",
+        "Encoding": "UTF-8",
+        "RoxygenNote": "7.3.2",
+        "NeedsCompilation": "no",
+        "Packaged": "2025-04-21 16:14:20 UTC; garrick",
+        "Author": "Winston Chang [aut, cre],\n  Barbara Borges Ribeiro [aut],\n  Posit Software, PBC [cph],\n  Almasaeed Studio [ctb, cph] (AdminLTE theme for Bootstrap),\n  Adobe Systems Incorporated [ctb, cph] (Source Sans Pro font)",
+        "Maintainer": "Winston Chang <winston@posit.co>",
+        "Repository": "RSPM",
+        "Date/Publication": "2025-04-21 21:30:02 UTC",
+        "Built": "R 4.5.0; ; 2025-04-22 04:22:15 UTC; unix",
+        "RemoteType": "standard",
+        "RemotePkgRef": "shinydashboard",
+        "RemoteRef": "shinydashboard",
+        "RemoteRepos": "http://rspm/default/latest",
+        "RemoteSha": "0.7.3"
+      }
+    },
     "sourcetools": {
       "Source": "CRAN",
       "Repository": "http://rspm/default/latest",
@@ -3065,7 +3190,13 @@
       "checksum": "6a24c4b7d1a65e293f2f78b63fa32dfb"
     },
     "app.R": {
-      "checksum": "dbb36d9e0e918c19fb569a76061d8c68"
+      "checksum": "07816e68c59019d39cb9f20d3f7e7388"
+    },
+    "gauge_dashboard_code.R": {
+      "checksum": "64ce0e1ceb269ee3b09d57b710fdbfd1"
+    },
+    "guide.Rmd": {
+      "checksum": "39c7fd6eead51e7a3744c04863886892"
     },
     "pirs_db_v1.sqlite": {
       "checksum": "f12c26b10d7114132f4ceed7a71a31c0"
@@ -3075,6 +3206,9 @@
     },
     "README.md": {
       "checksum": "431196991cb6c4be0d8f88b2078616fd"
+    },
+    "www/model_flow.png": {
+      "checksum": "605e19b7175471e08fa6e582b9d3d0d5"
     }
   },
   "users": null
