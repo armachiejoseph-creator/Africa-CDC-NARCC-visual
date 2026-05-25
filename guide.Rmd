@@ -1,0 +1,112 @@
+---
+output: html_fragment
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+## Understanding the SEIQHR Model
+
+<img src="model_flow.png" alt="SEIQHR Model Flow Diagram" style="width:100%; max-width:600px; display:block; margin:auto;"/>
+
+This simulation tracks the progression of an infection through a
+population using the following differential equations:
+
+$$
+\begin{aligned}
+\frac{dS}{dt} &= -\lambda S \\
+\frac{dE}{dt} &= \lambda S - (\alpha + \omega) E \\
+\frac{dI}{dt} &= \omega E - (p + \gamma_I) I \\
+\frac{dH}{dt} &= p I - \gamma_H H \\
+\frac{dQ}{dt} &= \alpha E + \gamma_H H + \gamma_I I - \gamma_Q Q \\
+\frac{dR}{dt} &= \gamma_Q Q + \gamma_H H + \gamma_I I
+\end{aligned}
+$$
+
+Where the force of infection ($\lambda$) is defined as:
+
+$$
+\lambda = \frac{\beta I + \epsilon \beta Q}{N}
+$$
+
+### Model Parameters
+
+The table below defines the parameters used in the SEIQR model to
+simulate transmission dynamics, isolation efficacy, and recovery rates.
+
+| Parameter | Description |
+|:-----------------------------------|:-----------------------------------|
+| $\beta$ | Community transmission rate |
+| $\epsilon$ | Transmission leakage factor from quarantined individuals |
+| $\alpha$ | Rate at which exposed individuals are moved into quarantine |
+| $\omega$ | Rate at which exposed individuals move to the infectious community |
+| $p$ | Rate of detection and hospitalization for infectious individuals |
+| $\delta$ | Rate of leakage from quarantine back to the susceptible population |
+| $\gamma_I$ | Recovery rate for the infectious population |
+| $\gamma_H$ | Recovery rate for the hospitalized population |
+| $\gamma_Q$ | Recovery rate for the quarantined population |
+
+## Model Explanation
+
+The core of the model is the Force of Infection ($\lambda$), which
+represents the probability of a susceptible person becoming infected.
+Notably, this model calculates risk from two sources: the general
+infectious population ($I$) and "quarantine leakage" from the
+quarantined population ($I_q$). This allows you to simulate how
+effective quarantine measures are at stopping spread versus how often
+quarantined individuals still manage to interact with others.
+
+The population flows follow these distinct paths:Exposure: Susceptible
+($S$) individuals transition to the Exposed ($E_n$) state based on
+$\lambda$.
+
+**Decision Node**: Once exposed, the population splits. A portion is
+successfully diverted into Quarantine ($I_q$) based on the quarantine
+rate ($q$), while the remainder becomes Infectious ($I$) in the
+community.Clinical Progression: The Infectious group ($I$) faces two
+outcomes: being detected and moved to Hospitalization ($H$) at rate $p$
+where the risk of community transmission is eliminated while the
+recieved care or recovering naturally at rate $\gamma_I$. Recovery: The
+model features three distinct recovery paths. All infected
+compartments—Infectious ($I$), Hospitalized ($H$), and Quarantined
+($I_q$)—eventually flow into the Removed ($R$) category. This represents
+the acquisition of immunity, meaning these individuals are no longer
+part of the transmission cycle.
+
+**Note** it is importantant to note that during contact tracing, you
+will quarantine people who you suspect may have been exposed. Therefore
+the number quarantined here does not represent the number you will
+quarantine on the field. You must adjust for your ability to detect
+individuals who had been exposed( i.e have had effective contact with
+case)
+
+### Compartmental Transitions
+
+1.  **The Exposure Split:** Upon becoming exposed ($E_n$), the
+    population is divided. The rate $q$ determines the success of your
+    quarantine policy in diverting exposed individuals away from the
+    general infectious pool ($I$).
+2.  **Clinical Burden:** The infectious population ($I$) represents the
+    active burden on community health. The parameter $p$ allows for the
+    simulation of testing and detection efforts that move individuals
+    from the community into the Hospitalized ($H$) category.
+3.  **Recovery and Immunity:** A critical feature of this model is that
+    all clinical and isolation pathways—Infectious, Hospitalized, and
+    Quarantined—eventually consolidate into the Removed ($R$) category.
+    This represents a state of recovery where individuals have acquired
+    immunity and can no longer contract or transmit the disease.
+
+### Policy Implications
+
+This model is highly sensitive to the interaction between quarantine
+rate ($q$) and leakage ($\epsilon$). By adjusting these, you can observe
+how a "leaky" quarantine might still be beneficial if the detection rate
+($p$) is high, or conversely, how a high quarantine rate can
+significantly flatten the infection curve by keeping individuals out of
+the infectious ($I$) compartment. This model assumes that individuals in
+the quarantined compartment ($Q$) can re-enter the susceptible pool
+($S$) at a rate of $\delta$. This reflects scenarios where quarantine is
+not permanent or where individuals exit the system while still
+susceptible to future infection. Conversely, individuals who
+successfully complete the quarantine process recover and move to the $R$
+compartment.

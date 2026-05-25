@@ -1,151 +1,121 @@
 library(shiny)
-library(bslib)
-library(plotly)
-library(bsicons)
-library(googlesheets4)
-library(dplyr)
+library(shinydashboard)
+library(deSolve)
+library(ggplot2)
+library(tidyr)
+library(markdown)
 
-# --- CONFIGURATION ---
-# Replace with your actual Google Sheet URL
-sheet_url <- "https://docs.google.com/spreadsheets/d/1TVNHPi4xf2jR00mFKd471m_Sy5OfnaVak3jmqsPqzfU/edit?usp=sharing"
-gs4_deauth() 
-
-# --- AFRICA CDC COLOR PALETTE ---
-cdc_maroon <- "#8B2332"
-cdc_teal   <- "#2E5A47"
-cdc_gold   <- "#C69214"
-cdc_grey   <- "#D3D3D3"
-
-# --- GAUGE COMPONENT (TIGHTER HEIGHT) ---
-create_cdc_gauge <- function(value, title, color, target) {
-  plot_ly(
-    type = "indicator",
-    mode = "gauge+number",
-    value = value,
-    number = list(suffix = "%", font = list(color = "#333333", size = 28)),
-    title = list(text = title, font = list(size = 15, color = "#333333")),
-    gauge = list(
-      axis = list(
-        range = list(0, 100), 
-        tickcolor = "#444444",
-        tickvals = c(50, target),
-        ticktext = c("50", target),
-        tickmode = "array"
-      ),
-      bar = list(color = color),
-      bgcolor = "white",
-      borderwidth = 1,
-      bordercolor = "#cccccc",
-      threshold = list(
-        line = list(color = "black", width = 3),
-        thickness = 0.8,
-        value = target
-      ),
-      steps = list(list(range = list(0, 100), color = "#f9f9f9"))
-    )
-  ) %>%
-    layout(
-      height = 160, # Reduced height to fit snugly in card
-      margin = list(l = 35, r = 35, b = 10, t = 45),
-      paper_bgcolor = "transparent"
-    ) %>%
-    config(displayModeBar = FALSE)
+# 1. Model Definition
+model_func <- function(t, state, parameters) {
+  with(as.list(c(state, parameters)), {
+    N <- S + E + I + H + Q + R
+    lambda <- (beta * I / N) + (epsilon * beta * Q / N)
+    
+    dS <- -lambda * S
+    dE <- lambda * S - (alpha + omega) * E
+    dI <- omega * E - (p + gamma_I) * I
+    dH <- p * I - gamma_H * H
+    dQ <- alpha * E + gamma_H * H + gamma_I * I - gamma_Q * Q
+    dR <- gamma_Q * Q + gamma_H * H + gamma_I * I
+    
+    return(list(c(dS, dE, dI, dH, dQ, dR)))
+  })
 }
-
-# --- UI ---
-ui <- page_sidebar(
-  title = "Africa CDC Strategic Presentation",
-  theme = bs_theme(version = 5, bootswatch = "lux", primary = cdc_maroon),
-  
-  sidebar = sidebar(
-    title = "Controls",
-    selectInput("bu_filter", "Select Business Unit (BU):", choices = "Loading..."),
-    actionButton("refresh", "Refresh Data", icon = icon("sync")),
-    hr(),
-    div(class = "text-center", "Safeguarding Africa's Health")
+# 2. UI Layout
+ui <- dashboardPage(
+  header = dashboardHeader(
+    title = "Ebola Epidemic Policy Lab", 
+    titleWidth = 350 # Adjust this pixel value until it fits your text perfectly
   ),
   
-  navset_hidden(
-    id = "slide_container",
-    nav_panel_hidden(
-      value = "slide1",
+  # CSS to pin header/sidebar and enable internal scrolling for content
+  tags$head(
+    tags$style(HTML("
+      /* Pin the header and sidebar */
+      .main-header { position: fixed; width: 100%; top: 0; }
+      .main-sidebar { position: fixed; height: 100%; top: 50px; }
       
-      # TOP ROW: VALUE BOXES
-      layout_column_wrap(
-        width = 1/3,
-        value_box(
-          title = "Broad Activities", value = textOutput("val_broad"),
-          showcase = bs_icon("folder2-open"), theme = "primary"
-        ),
-        value_box(
-          title = "Specific Activities", value = textOutput("val_spec"),
-          showcase = bs_icon("list-stars"),
-          style = paste0("background-color: ", cdc_teal, " !important; color: white;")
-        ),
-        value_box(
-          title = "Tier 3/4 Indicators", value = textOutput("val_ind"),
-          showcase = bs_icon("graph-up-arrow"), 
-          style = paste0("background-color: ", cdc_gold, " !important; color: white;")
-        )
+      /* Make content area scroll independently */
+      .content-wrapper {
+        margin-top: 50px; 
+        margin-left: 230px; 
+        height: calc(100vh - 50px);
+        overflow-y: auto;
+      }
+    "))
+  ),
+  
+  # Explicitly assign to the 'sidebar' argument to fix tagAssert error
+  sidebar = dashboardSidebar(
+    sidebarMenu(
+      menuItem("Simulator", tabName = "sim", icon = icon("dashboard")),
+      menuItem("Guide & Methodology", tabName = "guide", icon = icon("book"))
+    )
+  ),
+  
+  body = dashboardBody(
+    tabItems(
+      tabItem(tabName = "sim",
+              fluidRow(
+                column(width = 3, 
+                       sliderInput("beta", "β Transmission Rate:", 0, 1, 0.5),
+                       sliderInput("epsilon", "ε Quarantine Leakage:", 0, 0.2, 0.05),
+                       sliderInput("q", "q Quarantine Rate (α):", 0, 1, 0.2),
+                       sliderInput("p", "p Detection/Hosp Rate:", 0, 0.5, 0.1),
+                       sliderInput("delta", "δ Leakage to Susceptible:", 0, 0.1, 0.01),
+                       sliderInput("recovery", "Days to Recover:", 5, 50, 20)),
+                column(width = 9,
+                       fluidRow(valueBoxOutput("peakI", width = 4), 
+                                valueBoxOutput("peakQ", width = 4), 
+                                valueBoxOutput("peakH", width = 4)),
+                       box(title = "Clinical and Quarantine Dynamics", width = 12, plotOutput("epiPlot")))
+              )
       ),
-      
-      div(style = sprintf("height: 40px; background-color: %s; margin: 25px 0; border-radius: 5px;", cdc_grey)),
-      
-      # BOTTOM ROW: GAUGES (REDUCED CARD HEIGHT)
-      layout_column_wrap(
-        width = 1/4,
-        card(full_screen = FALSE, style = "height: 200px;", plotlyOutput("gauge_burn")),
-        card(full_screen = FALSE, style = "height: 200px;", plotlyOutput("gauge_comp")),
-        card(full_screen = FALSE, style = "height: 200px;", plotlyOutput("gauge_q_perf")),
-        card(full_screen = FALSE, style = "height: 200px;", plotlyOutput("gauge_ytd"))
-      )
+      tabItem(tabName = "guide", uiOutput("guide_content"))
     )
   )
 )
-
-# --- SERVER ---
-server <- function(input, output, session) {
-  
-  sheet_data <- reactive({
-    input$refresh 
-    read_sheet(sheet_url)
+# 3. Server Logic
+server <- function(input, output) {
+  sim_data <- reactive({
+    rate_gamma <- 1 / input$recovery
+    init <- c(S = 999999, E = 1, I = 0, H = 0, Q = 0, R = 0)
+    params <- c(beta = input$beta, epsilon = input$epsilon, 
+                alpha = input$q, omega = (1 - input$q), 
+                p = input$p, gamma_I = rate_gamma, 
+                gamma_H = rate_gamma, gamma_Q = rate_gamma, delta = input$delta)
+    out <- ode(y = init, times = 0:700, func = model_func, parms = params)
+    as.data.frame(out)
   })
   
-  observe({
-    req(sheet_data())
-    units <- unique(sheet_data()$Bu)
-    updateSelectInput(session, "bu_filter", choices = c("All", units), selected = "All")
+  output$peakI <- renderValueBox({
+    df <- sim_data()
+    valueBox(tags$span(style = "font-size: 40%;", paste0("Peak: ", round(max(df$I)), " | Total: ", round(max(df$I + df$R)))), 
+             "Infectious (Community)", icon = icon("users"), color = "red")
   })
   
-  filtered_metrics <- reactive({
-    req(sheet_data())
-    df <- sheet_data()
-    
-    if (input$bu_filter != "All") {
-      df <- df %>% filter(Bu == input$bu_filter)
-    }
-    
-    df %>% summarize(
-      broad_sum = sum(broad, na.rm = TRUE),
-      spec_sum = sum(specific, na.rm = TRUE),
-      ind_sum = sum(indicator, na.rm = TRUE),
-      burn_avg = mean(burnrate, na.rm = TRUE),
-      comp_avg = mean(completion, na.rm = TRUE),
-      q_avg = mean(performance_q1, na.rm = TRUE),
-      y_avg = mean(performance_y, na.rm = TRUE)
-    )
+  output$peakQ <- renderValueBox({
+    df <- sim_data()
+    valueBox(tags$span(style = "font-size: 40%;", paste0("Peak: ", round(max(df$Q)), " | Total: ", round(max(df$Q + df$R)))), 
+             "Quarantined", icon = icon("hospital-user"), color = "yellow")
   })
   
-  # Render Value Boxes
-  output$val_broad <- renderText({ filtered_metrics()$broad_sum })
-  output$val_spec  <- renderText({ filtered_metrics()$spec_sum })
-  output$val_ind   <- renderText({ filtered_metrics()$ind_sum })
+  output$peakH <- renderValueBox({
+    df <- sim_data()
+    valueBox(tags$span(style = "font-size: 40%;", paste0("Peak: ", round(max(df$H)), " | Total: ", round(max(df$H + df$R)))), 
+             "Hospitalized", icon = icon("bed"), color = "blue")
+  })
   
-  # Render Gauges
-  output$gauge_burn   <- renderPlotly({ create_cdc_gauge(filtered_metrics()$burn_avg, "Burn Rate", cdc_maroon, 25) })
-  output$gauge_comp   <- renderPlotly({ create_cdc_gauge(filtered_metrics()$comp_avg, "Completion Rate", cdc_teal, 90) })
-  output$gauge_q_perf <- renderPlotly({ create_cdc_gauge(filtered_metrics()$q_avg, "Q1 Performance", cdc_gold, 90) })
-  output$gauge_ytd    <- renderPlotly({ create_cdc_gauge(filtered_metrics()$y_avg, "YTD Performance", cdc_teal, 25) })
+  output$epiPlot <- renderPlot({
+    sim_data() %>% pivot_longer(-time, names_to = "compartment", values_to = "count") %>%
+      filter(compartment %in% c("I", "Q", "H")) %>% 
+      ggplot(aes(x = time, y = count, color = compartment)) +
+      geom_line(size = 1.2) + theme_minimal() + labs(y = "Count", x = "Days")
+  })
+  
+  output$guide_content <- renderUI({
+    withMathJax(includeMarkdown("guide.Rmd"))
+  })
 }
 
 shinyApp(ui, server)
