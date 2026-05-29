@@ -5,6 +5,7 @@ library(ggplot2)
 library(tidyr)
 library(dplyr)
 library(markdown)
+# just a note
 
 # 1. Model Definition
 model_func <- function(t, state, parameters) {
