@@ -165,13 +165,13 @@ ref_line  <- function(label, value) tags$div(style="margin-bottom:8px;",
 
 # ── 2. UI ─────────────────────────────────────────────────────────────────────
 ui <- page_navbar(
-  # Requires an image file at www/africa_cdc_logo.png next to this app.R —
+  # Requires an image file at www/cdc.png next to this app.R —
   # Shiny serves anything in a local "www" folder automatically. Swap the
   # filename below if yours is named differently.
   title = tagList(
     tags$img(src = "cdc.png", height = "28px",
              style = "margin-right:10px;vertical-align:middle;"),
-    tags$span("Africa CDC Big Ticket indicators", style = "vertical-align:middle;")
+    tags$span("Africa CDC Big-Ticket review", style = "vertical-align:middle;")
   ),
   id = "main_nav",
   position = "fixed-top",
@@ -245,6 +245,21 @@ ui <- page_navbar(
         display:flex; align-items:center; justify-content:space-between; }
       .pct-readout-label { font-size:11px; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:.04em; }
       .pct-readout-value { font-size:20px; font-weight:700; }
+
+      .report-table-wrap { overflow-x: auto; border-radius: 10px; box-shadow: 0 1px 8px rgba(0,0,0,.05); }
+      .report-table { width: 100%; border-collapse: collapse; background: white; min-width: 900px; }
+      .report-table thead th {
+        background: #0E4B43; color: white; font-size: 10.5px; font-weight: 700;
+        text-transform: uppercase; letter-spacing: .04em; text-align: left; padding: 11px 14px;
+        white-space: nowrap;
+      }
+      .report-table tbody td { padding: 10px 14px; font-size: 12.5px; color: #1f2937;
+        border-bottom: 1px solid #f1f2f4; vertical-align: top; }
+      .report-table td.big-ticket-cell, .report-table td.indicator-cell {
+        max-width: 220px; vertical-align: middle; font-weight: 500; border-right: 1px solid #f1f2f4;
+      }
+      .report-table tbody tr:last-child td { border-bottom: none; }
+      .report-table td.units-not-reported { color: #6b7280; font-size: 11.5px; max-width: 240px; }
     ")),
     # Delegated click listener — fires for ANY .report-btn, including ones
     # rendered after an admin hard-reset. One listener, one Shiny input,
@@ -259,11 +274,15 @@ ui <- page_navbar(
   nav_panel("Results Dashboard",
             div(style="max-width:920px; margin:0 auto; padding:15px;",
                 div(class="page-sub", "Indicators and the business units contributing to each. Click Report to log progress."),
-                layout_column_wrap(width = 1/2,
-                                   selectInput("f_tier", "Filter by Tier:", choices = c("All", "Tier 1", "Tier 2", "Tier 3")),
-                                   textInput("f_search", "Search indicator code, name, or result:")
-                ),
+                uiOutput("dashboard_filters"),
                 uiOutput("indicator_list")
+            )
+  ),
+  nav_panel("Progress Reports",
+            div(style="max-width:1150px; margin:0 auto; padding:15px;",
+                div(class="page-sub", "One row per submitted report. Indicators with outstanding units show who hasn't reported yet."),
+                uiOutput("report_filters"),
+                uiOutput("report_viewer_list")
             )
   ),
   nav_spacer(),
@@ -287,13 +306,157 @@ server <- function(input, output, session) {
       group_by(contribution_id) %>% slice_max(timestamp, n = 1, with_ties = FALSE) %>% ungroup()
   })
   
+  # ── Progress Reports: filters (choices rebuild whenever the data changes,
+  # current selection preserved via isolate() so regenerating the dropdown
+  # doesn't reset what the person had picked) ─────────────────────────────────
+  output$report_filters <- renderUI({
+    ind <- indicators_data()
+    bus <- contributions_data()
+    
+    pillar_choices <- c("All", if (nrow(ind) > 0) sort(unique(ind$pillar)) else character(0))
+    ind_choices <- c("All" = "All")
+    if (nrow(ind) > 0) ind_choices <- c(ind_choices, setNames(ind$indicator_id, ind$indicator_and_code))
+    bu_choices <- c("All", if (nrow(bus) > 0) sort(unique(bus$bu_name)) else character(0))
+    
+    keep_selected <- function(current, choices) if (!is.null(current) && current %in% unname(choices)) current else "All"
+    sel_pillar <- keep_selected(isolate(input$rv_pillar), pillar_choices)
+    sel_ind    <- keep_selected(isolate(input$rv_indicator), ind_choices)
+    sel_bu     <- keep_selected(isolate(input$rv_bu), bu_choices)
+    sel_status <- keep_selected(isolate(input$rv_status), c("All","Reported","Not Applicable","No report"))
+    
+    layout_column_wrap(width = 1/4,
+                       selectInput("rv_pillar", "Pillar:", choices = pillar_choices, selected = sel_pillar),
+                       selectInput("rv_indicator", "Indicator:", choices = ind_choices, selected = sel_ind),
+                       selectInput("rv_bu", "Business Unit:", choices = bu_choices, selected = sel_bu),
+                       selectInput("rv_status", "Status:", choices = c("All","Reported","Not Applicable","No report"), selected = sel_status)
+    )
+  })
+  
+  # One row per submitted report. Indicators where NO contributing BU has
+  # reported yet get a single placeholder row instead (unit = "—") so the
+  # indicator itself doesn't just disappear from the table.
+  report_table_data <- reactive({
+    ind   <- indicators_data()
+    bus   <- contributions_data()
+    latest <- latest_reports()
+    if (nrow(ind) == 0) return(NULL)
+    
+    reported_ids <- if (nrow(latest) > 0) latest$contribution_id else character(0)
+    
+    rows <- lapply(seq_len(nrow(ind)), function(i) {
+      this_ind <- ind[i, ]
+      ind_bus  <- bus %>% filter(indicator_id == this_ind$indicator_id)
+      if (nrow(ind_bus) == 0) return(NULL)
+      
+      reported_bus     <- ind_bus %>% filter(contribution_id %in% reported_ids)
+      not_reported_bus <- ind_bus %>% filter(!(contribution_id %in% reported_ids))
+      not_reported_txt <- if (nrow(not_reported_bus) == 0) "None — all reported" else paste(not_reported_bus$bu_name, collapse = ", ")
+      
+      if (nrow(reported_bus) == 0) {
+        return(data.frame(
+          indicator_id = this_ind$indicator_id, pillar = this_ind$pillar, big_ticket = this_ind$big_ticket,
+          indicator = this_ind$indicator_and_code, unit = "—",
+          target = NA_real_, achieved = NA_real_, performance = NA_real_,
+          status = "No report", not_reported = not_reported_txt, stringsAsFactors = FALSE
+        ))
+      }
+      
+      bind_rows(lapply(seq_len(nrow(reported_bus)), function(j) {
+        cid <- reported_bus$contribution_id[j]
+        r   <- latest %>% filter(contribution_id == cid)
+        is_na_status <- !is.na(r$status[1]) && r$status[1] == "Not Applicable"
+        data.frame(
+          indicator_id = this_ind$indicator_id, pillar = this_ind$pillar, big_ticket = this_ind$big_ticket,
+          indicator = this_ind$indicator_and_code, unit = reported_bus$bu_name[j],
+          target      = if (is_na_status) NA_real_ else r$target[1],
+          achieved    = if (is_na_status) NA_real_ else r$achieved[1],
+          performance = if (is_na_status) NA_real_ else r$performance_pct[1],
+          status      = if (is_na_status) "Not Applicable" else "Reported",
+          not_reported = not_reported_txt, stringsAsFactors = FALSE
+        )
+      }))
+    })
+    bind_rows(rows)
+  })
+  
+  output$report_viewer_list <- renderUI({
+    df <- report_table_data()
+    if (is.null(df) || nrow(df) == 0) return(h5(style="color:#9ca3af;", "No indicators loaded. Use Admin > Upload to add the framework."))
+    
+    if (!is.null(input$rv_pillar) && input$rv_pillar != "All") df <- df %>% filter(pillar == input$rv_pillar)
+    if (!is.null(input$rv_indicator) && input$rv_indicator != "All") df <- df %>% filter(indicator_id == input$rv_indicator)
+    if (!is.null(input$rv_bu) && input$rv_bu != "All") df <- df %>% filter(unit == input$rv_bu)
+    if (!is.null(input$rv_status) && input$rv_status != "All") df <- df %>% filter(status == input$rv_status)
+    if (nrow(df) == 0) return(h5(style="color:#9ca3af;", "No rows match the current filters."))
+    
+    # Rows for the same indicator are always contiguous (built one indicator
+    # at a time, and filtering only removes rows, never reorders) — so a
+    # run-length encode on indicator_id is enough to know each group's size.
+    rl <- rle(df$indicator_id)
+    is_group_start <- unlist(mapply(function(n) c(TRUE, rep(FALSE, n - 1)), rl$lengths, SIMPLIFY = FALSE))
+    group_span     <- unlist(mapply(function(n) c(n, rep(NA_integer_, n - 1)), rl$lengths, SIMPLIFY = FALSE))
+    group_index    <- cumsum(is_group_start)
+    
+    tags$div(class="report-table-wrap",
+             tags$table(class="report-table",
+                        tags$thead(tags$tr(
+                          tags$th("Big Ticket"), tags$th("Indicator"), tags$th("Reporting Unit"),
+                          tags$th("Target / Achieved"), tags$th("Performance"), tags$th("Status"),
+                          tags$th("Units Not Reported")
+                        )),
+                        tags$tbody(
+                          lapply(seq_len(nrow(df)), function(i) {
+                            r  <- df[i, ]
+                            st <- if (r$status == "Reported") status_for(r$achieved, r$target)
+                            else if (r$status == "Not Applicable") NA_STATUS
+                            else list(label = "No report", color = AU$muted, bg = "#f1f2f4")
+                            ta_txt   <- if (is.na(r$target) || is.na(r$achieved)) "—" else paste0(r$achieved, " / ", r$target)
+                            perf_txt <- if (is.na(r$performance)) "—" else paste0(r$performance, "%")
+                            row_bg   <- if (group_index[i] %% 2 == 0) "background:#fafbfb;" else ""
+                            
+                            tags$tr(style = row_bg,
+                                    if (is_group_start[i]) tags$td(class="big-ticket-cell", rowspan = group_span[i], r$big_ticket),
+                                    if (is_group_start[i]) tags$td(class="indicator-cell", rowspan = group_span[i], r$indicator),
+                                    tags$td(r$unit),
+                                    tags$td(ta_txt),
+                                    tags$td(perf_txt),
+                                    tags$td(tags$span(class="status-pill", style=paste0("color:",st$color,";background:",st$bg,";"), st$label)),
+                                    tags$td(class="units-not-reported", r$not_reported)
+                            )
+                          })
+                        )
+             )
+    )
+  })
+  
+  # ── Dashboard filters — Pillar and Tier choices both rebuilt from whatever's
+  # actually in the data (same pattern as the Progress Reports filters), so a
+  # new pillar name or tier value in an uploaded file just shows up automatically.
+  output$dashboard_filters <- renderUI({
+    ind <- indicators_data()
+    pillar_choices <- c("All", if (nrow(ind) > 0) sort(unique(ind$pillar)) else character(0))
+    tier_choices   <- c("All", if (nrow(ind) > 0) sort(unique(ind$tier)) else character(0))
+    
+    keep_selected <- function(current, choices) if (!is.null(current) && current %in% choices) current else "All"
+    sel_pillar <- keep_selected(isolate(input$f_pillar), pillar_choices)
+    sel_tier   <- keep_selected(isolate(input$f_tier), tier_choices)
+    cur_search <- isolate(input$f_search); if (is.null(cur_search)) cur_search <- ""
+    
+    layout_column_wrap(width = 1/3,
+                       selectInput("f_pillar", "Filter by Pillar:", choices = pillar_choices, selected = sel_pillar),
+                       selectInput("f_tier", "Filter by Tier:", choices = tier_choices, selected = sel_tier),
+                       textInput("f_search", "Search indicator code, name, or result:", value = cur_search)
+    )
+  })
+  
   # ── Dashboard: indicator cards + contributing-BU report rows ───────────────
   output$indicator_list <- renderUI({
     data <- indicators_data()
     if (nrow(data) == 0) return(h5("No indicators loaded. Use Admin > Upload to add the framework."))
     
-    if (input$f_tier != "All") data <- data %>% filter(tier == input$f_tier)
-    if (nzchar(input$f_search)) {
+    if (!is.null(input$f_pillar) && input$f_pillar != "All") data <- data %>% filter(pillar == input$f_pillar)
+    if (!is.null(input$f_tier) && input$f_tier != "All") data <- data %>% filter(tier == input$f_tier)
+    if (!is.null(input$f_search) && nzchar(input$f_search)) {
       q <- input$f_search
       data <- data %>% filter(grepl(q, indicator_and_code, ignore.case=TRUE) |
                                 grepl(q, result, ignore.case=TRUE))
