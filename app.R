@@ -1,79 +1,120 @@
 library(shiny)
 library(bslib)
 library(DBI)
-library(RSQLite)
+library(RPostgres)
 library(dplyr)
 library(readxl)
 library(openxlsx)
 
-# ── 1. DATABASE SETUP ─────────────────────────────────────────────────────────
-# IMPORTANT for Shiny Server deployment: keep the database OUTSIDE the app's
-# code directory. If the app folder ever gets overwritten/rsynced during a
-# redeploy, a db file living next to app.R would be wiped out along with it.
-# Point this at a dedicated, persistent, shiny-user-writable directory instead,
-# e.g. /srv/shiny-server-data/results_framework/  (create it once, then:
-#   sudo chown -R shiny:shiny /srv/shiny-server-data/results_framework
-#   sudo chmod 750 /srv/shiny-server-data/results_framework
-# — adjust the user/group to whatever Shiny Server runs as on your VM).
-data_dir <- Sys.getenv("RESULTS_DATA_DIR", unset = ".")  # falls back to "." for local testing
-if (!dir.exists(data_dir)) dir.create(data_dir, recursive = TRUE)
-db_name <- file.path(data_dir, "results_framework_db_v1.sqlite")
-con <- dbConnect(SQLite(), db_name)
-
-# WAL mode lets reads and writes happen concurrently instead of the whole
-# file locking on every write — cheap insurance once more than one person
-# might submit a report at the same moment.
-dbExecute(con, "PRAGMA journal_mode=WAL;")
-
-# Registered once at app-process level (NOT inside server(), which runs
-# per-session and would try to disconnect this shared connection repeatedly).
-onStop(function() {
-  if (dbIsValid(con)) dbDisconnect(con)
-})
+# ── 1. DATABASE SETUP (Supabase / Postgres) ───────────────────────────────────
+# Credentials come from environment variables — NEVER hardcode them here.
+# Set these on the VM (e.g. in a startup script, Renviron.site, or whatever
+# Shiny Server's env config uses), the same way RESULTS_ADMIN_CODE is set:
+#   SUPABASE_HOST, SUPABASE_PORT, SUPABASE_DB, SUPABASE_USER, SUPABASE_PASSWORD
+get_db_conn <- function() {
+  dbConnect(
+    RPostgres::Postgres(),
+    host     = "aws-1-eu-central-1.pooler.supabase.com",
+    port     = 5432,
+    dbname   = "postgres",
+    user     = "postgres.mvxbhugcfpxwmyblkgqc",
+    password = "SUPABASE_PASSWORD" # <-- REPLACE WITH YOUR SUPABASE PASSWORD
+  )
+}
 
 AU <- list(green = "#0E4B43", gold = "#b38e00", red = "#952038",
            blue = "#025891", muted = "#6b7280")
 
-# One-time migration: if a database from before this column rename exists,
-# drop just the indicators table and let it get recreated below with the new
-# schema. Reports are untouched — same "framework can be reset without losing
-# reports" behavior the admin hard-reset already relies on.
-old_schema <- tryCatch({
-  info <- dbGetQuery(con, "PRAGMA table_info(indicators)")
-  "ahss_pillar_no" %in% info$name || "indicator_code" %in% info$name
-}, error = function(e) FALSE)
-if (old_schema) dbExecute(con, "DROP TABLE indicators")
-
-# Column names here map 1:1 to your real source columns:
-#   #                                   -> indicator_id
-#   Pillar(s)                          -> pillar
-#   Big Ticket                         -> big_ticket
-#   Result(s)                          -> result
-#   Indicator & Code (Link from PIRS)  -> indicator_and_code
-#   Tier                               -> tier
-#   2026 Target                        -> target_2026
-#   Mid-Year 2026 Milestone            -> midyear_2026_milestone
-#   Delivery Model                     -> delivery_model
-#   Success Factors                    -> success_factors
-#   Primary Responsibility BU          -> primary_bu
-#   Contributing BUs                   -> contributing_bus
-dbExecute(con, "CREATE TABLE IF NOT EXISTS indicators (
-  indicator_id TEXT PRIMARY KEY,
-  pillar TEXT, big_ticket TEXT, result TEXT, indicator_and_code TEXT, tier TEXT,
-  target_2026 REAL, midyear_2026_milestone REAL, delivery_model TEXT,
-  success_factors TEXT, primary_bu TEXT, contributing_bus TEXT
-)")
-
-dbExecute(con, "CREATE TABLE IF NOT EXISTS reports (
-  report_id INTEGER PRIMARY KEY AUTOINCREMENT,
-  contribution_id TEXT, indicator_id TEXT, indicator_code TEXT, bu_name TEXT,
-  status TEXT, target REAL, achieved REAL, performance_pct REAL,
-  progress TEXT, challenges TEXT, next_steps TEXT, na_reason TEXT, timestamp TEXT
-)")
-# Safe for databases created before status/na_reason existed — errors if the
-# column is already there, which we just ignore.
-try(dbExecute(con, "ALTER TABLE reports ADD COLUMN status TEXT"), silent = TRUE)
-try(dbExecute(con, "ALTER TABLE reports ADD COLUMN na_reason TEXT"), silent = TRUE)
+# ── One-time bootstrap: runs once when the app process starts, using a
+# short-lived connection that's opened and closed immediately — NOT the
+# connection every user session will use (that's opened per-session below,
+# inside server()). This mirrors your own snippet's pattern exactly.
+{
+  boot_con <- get_db_conn()
+  
+  # One-time migration: if a database from before this column rename exists,
+  # drop just the indicators table and let it get recreated below with the
+  # current schema. Reports are untouched — same "framework can be reset
+  # without losing reports" behavior the admin hard-reset already relies on.
+  old_schema <- tryCatch({
+    info <- dbGetQuery(boot_con, "SELECT column_name FROM information_schema.columns WHERE table_name = 'indicators'")
+    "ahss_pillar_no" %in% info$column_name || "indicator_code" %in% info$column_name
+  }, error = function(e) FALSE)
+  if (old_schema) dbExecute(boot_con, "DROP TABLE indicators")
+  
+  # Column names here map 1:1 to your real source columns:
+  #   #                                   -> indicator_id
+  #   Pillar(s)                          -> pillar
+  #   Big Ticket                         -> big_ticket
+  #   Result(s)                          -> result
+  #   Indicator & Code (Link from PIRS)  -> indicator_and_code
+  #   Tier                               -> tier
+  #   2026 Target                        -> target_2026
+  #   Mid-Year 2026 Milestone            -> midyear_2026_milestone
+  #   Delivery Model                     -> delivery_model
+  #   Success Factors                    -> success_factors
+  #   Primary Responsibility BU          -> primary_bu
+  #   Contributing BUs                   -> contributing_bus
+  dbExecute(boot_con, "CREATE TABLE IF NOT EXISTS indicators (
+    indicator_id TEXT PRIMARY KEY,
+    pillar TEXT, big_ticket TEXT, result TEXT, indicator_and_code TEXT, tier TEXT,
+    target_2026 REAL, midyear_2026_milestone REAL, delivery_model TEXT,
+    success_factors TEXT, primary_bu TEXT, contributing_bus TEXT
+  )")
+  
+  dbExecute(boot_con, "CREATE TABLE IF NOT EXISTS reports (
+    report_id SERIAL PRIMARY KEY,
+    contribution_id TEXT, indicator_id TEXT, indicator_code TEXT, bu_name TEXT,
+    status TEXT, target REAL, achieved REAL, performance_pct REAL,
+    progress TEXT, challenges TEXT, next_steps TEXT, na_reason TEXT, timestamp TEXT
+  )")
+  # Postgres supports IF NOT EXISTS directly on ADD COLUMN — no need for the
+  # try()/silent trick SQLite required. Harmless no-op if already present.
+  dbExecute(boot_con, "ALTER TABLE reports ADD COLUMN IF NOT EXISTS status TEXT")
+  dbExecute(boot_con, "ALTER TABLE reports ADD COLUMN IF NOT EXISTS na_reason TEXT")
+  
+  # Seed with sample rows the first time the DB is created, so the app is
+  # testable before an admin ever uploads anything.
+  if (dbGetQuery(boot_con, "SELECT COUNT(*) n FROM indicators")$n == 0) {
+    seed <- data.frame(
+      indicator_id = c("1", "2", "3"),
+      pillar = c("Pillar 1 - Public Health Emergency Management",
+                 "Pillar 2 - Laboratory Systems & Networks",
+                 "Pillar 3 - Partnerships & External Relations"),
+      big_ticket = c("Regional Rapid Response", "RISLNET Expansion", "Regional Stakeholder Platform"),
+      result = c("Member States receive timely technical assistance for outbreak readiness",
+                 "Strengthened laboratory networks across North Africa",
+                 "Regional bodies actively engaged in health security planning"),
+      indicator_and_code = c("RCC.12.3-6 — Number of Member States provided with TA through Country engagement visits",
+                             "RCC.12.2-5 — Number of programmatic activities implemented under RISLNET in Member States",
+                             "RCC.12.3-8 — Number of RECs and regional health stakeholders engaged at least once per year"),
+      tier = c("Tier 1", "Tier 2", "Tier 3"),
+      target_2026 = c(10, 8, 6),
+      midyear_2026_milestone = c(5, 4, 3),
+      delivery_model = c("Country engagement visits", "Regional workshops & lab assessments", "Stakeholder convenings"),
+      success_factors = c("Member State willingness to engage; travel funding; RCC staff availability",
+                          "Member State lab readiness; reagent supply chain; partner co-funding",
+                          "REC calendar alignment; leadership buy-in"),
+      primary_bu = c("Surveillance Division", "Laboratory Systems Division", "Partnerships Division"),
+      contributing_bus = c("Surveillance Division, Laboratory Systems Division, Emergency Response Division",
+                           "Laboratory Systems Division, Research Division",
+                           "Partnerships Division, Communications Division"),
+      stringsAsFactors = FALSE
+    )
+    for (i in seq_len(nrow(seed))) {
+      r <- seed[i, ]
+      dbExecute(boot_con, "INSERT INTO indicators
+        (indicator_id, pillar, big_ticket, result, indicator_and_code, tier,
+         target_2026, midyear_2026_milestone, delivery_model, success_factors, primary_bu, contributing_bus)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",
+                list(r$indicator_id, r$pillar, r$big_ticket, r$result, r$indicator_and_code, r$tier,
+                     r$target_2026, r$midyear_2026_milestone, r$delivery_model, r$success_factors,
+                     r$primary_bu, r$contributing_bus))
+    }
+  }
+  
+  dbDisconnect(boot_con)
+}
 
 # Maps your real Excel headers -> internal column names used above. This is
 # the ONLY place that needs to change if your spreadsheet's headers change —
@@ -93,36 +134,7 @@ HEADER_MAP <- c(
   "Contributing BUs"                   = "contributing_bus"
 )
 
-# Seed with sample rows the first time the DB is created, so the app is
-# testable before an admin ever uploads anything.
-if (dbGetQuery(con, "SELECT COUNT(*) n FROM indicators")$n == 0) {
-  seed <- data.frame(
-    indicator_id = c("1", "2", "3"),
-    pillar = c("Pillar 1 - Public Health Emergency Management",
-               "Pillar 2 - Laboratory Systems & Networks",
-               "Pillar 3 - Partnerships & External Relations"),
-    big_ticket = c("Regional Rapid Response", "RISLNET Expansion", "Regional Stakeholder Platform"),
-    result = c("Member States receive timely technical assistance for outbreak readiness",
-               "Strengthened laboratory networks across North Africa",
-               "Regional bodies actively engaged in health security planning"),
-    indicator_and_code = c("RCC.12.3-6 — Number of Member States provided with TA through Country engagement visits",
-                           "RCC.12.2-5 — Number of programmatic activities implemented under RISLNET in Member States",
-                           "RCC.12.3-8 — Number of RECs and regional health stakeholders engaged at least once per year"),
-    tier = c("Tier 1", "Tier 2", "Tier 3"),
-    target_2026 = c(10, 8, 6),
-    midyear_2026_milestone = c(5, 4, 3),
-    delivery_model = c("Country engagement visits", "Regional workshops & lab assessments", "Stakeholder convenings"),
-    success_factors = c("Member State willingness to engage; travel funding; RCC staff availability",
-                        "Member State lab readiness; reagent supply chain; partner co-funding",
-                        "REC calendar alignment; leadership buy-in"),
-    primary_bu = c("Surveillance Division", "Laboratory Systems Division", "Partnerships Division"),
-    contributing_bus = c("Surveillance Division, Laboratory Systems Division, Emergency Response Division",
-                         "Laboratory Systems Division, Research Division",
-                         "Partnerships Division, Communications Division"),
-    stringsAsFactors = FALSE
-  )
-  dbWriteTable(con, "indicators", seed, append = TRUE)
-}
+
 
 # Split "Contributing BUs" (comma-separated) into individual rows, one call
 # site so both the dashboard and the modal stay in sync with the same logic.
@@ -165,13 +177,13 @@ ref_line  <- function(label, value) tags$div(style="margin-bottom:8px;",
 
 # ── 2. UI ─────────────────────────────────────────────────────────────────────
 ui <- page_navbar(
-  # Requires an image file at www/cdc.png next to this app.R —
+  # Requires an image file at www/africa_cdc_logo.png next to this app.R —
   # Shiny serves anything in a local "www" folder automatically. Swap the
   # filename below if yours is named differently.
   title = tagList(
     tags$img(src = "cdc.png", height = "28px",
              style = "margin-right:10px;vertical-align:middle;"),
-    tags$span("Africa CDC Big-Ticket review", style = "vertical-align:middle;")
+    tags$span("Results Framework — Progress Reporting", style = "vertical-align:middle;")
   ),
   id = "main_nav",
   position = "fixed-top",
@@ -291,6 +303,14 @@ ui <- page_navbar(
 
 # ── SERVER ────────────────────────────────────────────────────────────────────
 server <- function(input, output, session) {
+  
+  # One connection per user session (not shared globally) — the right pattern
+  # for a pooled remote database. Every reactive/observer below just refers
+  # to "con" as before; only where it comes from has changed.
+  con <- get_db_conn()
+  onSessionEnded(function() {
+    if (dbIsValid(con)) dbDisconnect(con)
+  })
   
   refresh_val <- reactiveVal(0)
   is_admin    <- reactiveVal(FALSE)
@@ -622,7 +642,8 @@ server <- function(input, output, session) {
     if (is_na) {
       dbExecute(con, "INSERT INTO reports
         (contribution_id, indicator_id, indicator_code, bu_name, status, target, achieved,
-         performance_pct, progress, challenges, next_steps, na_reason, timestamp) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+         performance_pct, progress, challenges, next_steps, na_reason, timestamp)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)",
                 list(cid, ind$indicator_id[1], ind$indicator_and_code[1], b$bu_name[1], "Not Applicable",
                      NA_real_, NA_real_, NA_real_, NA_character_, NA_character_, NA_character_,
                      input[[paste0("na_reason_input_", cid)]], format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
@@ -631,7 +652,8 @@ server <- function(input, output, session) {
       pct <- if (is.na(tgt) || tgt == 0) 0 else round(ach / tgt * 100, 1)
       dbExecute(con, "INSERT INTO reports
         (contribution_id, indicator_id, indicator_code, bu_name, status, target, achieved, performance_pct,
-         progress, challenges, next_steps, na_reason, timestamp) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+         progress, challenges, next_steps, na_reason, timestamp)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)",
                 list(cid, ind$indicator_id[1], ind$indicator_and_code[1], b$bu_name[1], "Reported", tgt, ach, pct,
                      input[[paste0("progress_input_", cid)]], input[[paste0("challenges_input_", cid)]],
                      input[[paste0("nextsteps_input_", cid)]], NA_character_, format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
@@ -679,7 +701,12 @@ server <- function(input, output, session) {
   
   observeEvent(input$do_reset, {
     req(input$m_file)
-    df <- as.data.frame(read_excel(input$m_file$datapath))
+    
+    df <- tryCatch(as.data.frame(read_excel(input$m_file$datapath)), error = function(e) {
+      showNotification(paste("Could not read the Excel file:", e$message), type = "error")
+      NULL
+    })
+    req(df)
     
     # Validate against your ACTUAL spreadsheet headers (the ones you gave —
     # "#", "Pillar(s)", "Big Ticket", etc.), not the internal names.
@@ -691,20 +718,45 @@ server <- function(input, output, session) {
     }
     
     # Select in the expected order, then translate headers -> internal names.
-    df <- df[, real_headers]
+    # Wrapped in tryCatch: this previously ran unprotected, so a subtle header
+    # mismatch (duplicate column, hidden character) would crash silently with
+    # Shiny's generic error screen instead of telling you anything useful.
+    df <- tryCatch(df[, real_headers], error = function(e) {
+      showNotification(paste("Column selection failed:", e$message), type = "error")
+      NULL
+    })
+    req(df)
     names(df) <- unname(HEADER_MAP[names(df)])
     
     df$indicator_id <- as.character(df$indicator_id)
     df$target_2026 <- as.numeric(df$target_2026)
     df$midyear_2026_milestone <- as.numeric(df$midyear_2026_milestone)
     
+    if (nrow(df) == 0) {
+      showNotification("The file was read successfully but contains 0 data rows.", type = "warning")
+      return()
+    }
+    showNotification(paste0("Parsed ", nrow(df), " row(s) from the file. Writing to database..."), type = "message", duration = 3)
+    
     dbBegin(con)
     tryCatch({
       dbExecute(con, "DELETE FROM indicators")
-      dbWriteTable(con, "indicators", df, append = TRUE)
+      for (i in seq_len(nrow(df))) {
+        r <- df[i, ]
+        dbExecute(con, "INSERT INTO indicators
+          (indicator_id, pillar, big_ticket, result, indicator_and_code, tier,
+           target_2026, midyear_2026_milestone, delivery_model, success_factors, primary_bu, contributing_bus)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",
+                  list(r$indicator_id, r$pillar, r$big_ticket, r$result, r$indicator_and_code, r$tier,
+                       r$target_2026, r$midyear_2026_milestone, r$delivery_model, r$success_factors,
+                       r$primary_bu, r$contributing_bus))
+      }
       dbCommit(con)
       refresh_val(refresh_val() + 1)
-      showNotification("Hard reset complete. Framework replaced; reports preserved.", type = "message")
+      # Read back what's actually in the table right now, in this same
+      # connection/transaction context — the definitive check, not an assumption.
+      actual_count <- dbGetQuery(con, "SELECT COUNT(*) n FROM indicators")$n
+      showNotification(paste0("Hard reset complete. ", actual_count, " indicator(s) now in the database."), type = "message")
     }, error = function(e) {
       dbRollback(con)
       showNotification(paste("Reset error:", e$message), type = "error")
