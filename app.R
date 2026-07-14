@@ -183,7 +183,7 @@ ui <- page_navbar(
   title = tagList(
     tags$img(src = "cdc.png", height = "28px",
              style = "margin-right:10px;vertical-align:middle;"),
-    tags$span("Results Framework — Progress Reporting", style = "vertical-align:middle;")
+    tags$span("Africa CDC Big-ticket reporting", style = "vertical-align:middle;")
   ),
   id = "main_nav",
   position = "fixed-top",
