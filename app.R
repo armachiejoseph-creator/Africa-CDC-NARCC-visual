@@ -18,7 +18,7 @@ get_db_conn <- function() {
     port     = 5432,
     dbname   = "postgres",
     user     = "postgres.mvxbhugcfpxwmyblkgqc",
-    password = "SUPABASE_PASSWORD" # <-- REPLACE WITH YOUR SUPABASE PASSWORD
+    password = Sys.getenv("SUPABASE_DB_PASSWORD")
   )
 }
 
