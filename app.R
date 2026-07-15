@@ -183,7 +183,7 @@ ui <- page_navbar(
   title = tagList(
     tags$img(src = "cdc.png", height = "28px",
              style = "margin-right:10px;vertical-align:middle;"),
-    tags$span("Africa CDC Big-ticket reporting", style = "vertical-align:middle;")
+    tags$span("Africa CDC Big-Tickted Review", style = "vertical-align:middle;")
   ),
   id = "main_nav",
   position = "fixed-top",
@@ -292,7 +292,10 @@ ui <- page_navbar(
   ),
   nav_panel("Progress Reports",
             div(style="max-width:1150px; margin:0 auto; padding:15px;",
-                div(class="page-sub", "One row per submitted report. Indicators with outstanding units show who hasn't reported yet."),
+                div(style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;",
+                    div(class="page-sub", "One row per submitted report. Indicators with outstanding units show who hasn't reported yet."),
+                    downloadButton("download_progress_report", "Download this view", class="report-btn", style="flex-shrink:0;")
+                ),
                 uiOutput("report_filters"),
                 uiOutput("report_viewer_list")
             )
@@ -375,9 +378,11 @@ server <- function(input, output, session) {
       if (nrow(reported_bus) == 0) {
         return(data.frame(
           indicator_id = this_ind$indicator_id, pillar = this_ind$pillar, big_ticket = this_ind$big_ticket,
-          indicator = this_ind$indicator_and_code, unit = "—",
+          indicator = this_ind$indicator_and_code, unit = "—", contribution_id = NA_character_,
           target = NA_real_, achieved = NA_real_, performance = NA_real_,
-          status = "No report", not_reported = not_reported_txt, stringsAsFactors = FALSE
+          status = "No report", not_reported = not_reported_txt,
+          progress = NA_character_, challenges = NA_character_, next_steps = NA_character_,
+          stringsAsFactors = FALSE
         ))
       }
       
@@ -387,27 +392,39 @@ server <- function(input, output, session) {
         is_na_status <- !is.na(r$status[1]) && r$status[1] == "Not Applicable"
         data.frame(
           indicator_id = this_ind$indicator_id, pillar = this_ind$pillar, big_ticket = this_ind$big_ticket,
-          indicator = this_ind$indicator_and_code, unit = reported_bus$bu_name[j],
+          indicator = this_ind$indicator_and_code, unit = reported_bus$bu_name[j], contribution_id = cid,
           target      = if (is_na_status) NA_real_ else r$target[1],
           achieved    = if (is_na_status) NA_real_ else r$achieved[1],
           performance = if (is_na_status) NA_real_ else r$performance_pct[1],
           status      = if (is_na_status) "Not Applicable" else "Reported",
-          not_reported = not_reported_txt, stringsAsFactors = FALSE
+          not_reported = not_reported_txt,
+          progress = r$progress[1], challenges = r$challenges[1], next_steps = r$next_steps[1],
+          stringsAsFactors = FALSE
         )
       }))
     })
     bind_rows(rows)
   })
   
-  output$report_viewer_list <- renderUI({
+  # Shared by both the on-screen table and the download button, so the
+  # exported file always matches exactly what's currently filtered/visible.
+  filtered_report_data <- reactive({
     df <- report_table_data()
-    if (is.null(df) || nrow(df) == 0) return(h5(style="color:#9ca3af;", "No indicators loaded. Use Admin > Upload to add the framework."))
-    
+    if (is.null(df) || nrow(df) == 0) return(df)
     if (!is.null(input$rv_pillar) && input$rv_pillar != "All") df <- df %>% filter(pillar == input$rv_pillar)
     if (!is.null(input$rv_indicator) && input$rv_indicator != "All") df <- df %>% filter(indicator_id == input$rv_indicator)
     if (!is.null(input$rv_bu) && input$rv_bu != "All") df <- df %>% filter(unit == input$rv_bu)
     if (!is.null(input$rv_status) && input$rv_status != "All") df <- df %>% filter(status == input$rv_status)
-    if (nrow(df) == 0) return(h5(style="color:#9ca3af;", "No rows match the current filters."))
+    df
+  })
+  
+  output$report_viewer_list <- renderUI({
+    df <- filtered_report_data()
+    if (is.null(df) || nrow(df) == 0) {
+      msg <- if (is.null(report_table_data()) || nrow(report_table_data()) == 0)
+        "No indicators loaded. Use Admin > Upload to add the framework." else "No rows match the current filters."
+      return(h5(style="color:#9ca3af;", msg))
+    }
     
     # Rows for the same indicator are always contiguous (built one indicator
     # at a time, and filtering only removes rows, never reorders) — so a
@@ -770,6 +787,26 @@ server <- function(input, output, session) {
   output$download_reports_backup <- downloadHandler(
     filename = function() paste0("reports_backup_", format(Sys.time(), "%Y%m%d_%H%M"), ".xlsx"),
     content  = function(file) write.xlsx(dbGetQuery(con, "SELECT * FROM reports"), file, rowNames = FALSE)
+  )
+  
+  # Same raw column shape as the admin's "Download reports backup" — just
+  # scoped to whichever contribution_ids are currently visible on screen
+  # (after filters), instead of the entire reports table.
+  output$download_progress_report <- downloadHandler(
+    filename = function() paste0("progress_report_", format(Sys.time(), "%Y%m%d_%H%M"), ".xlsx"),
+    content = function(file) {
+      visible <- filtered_report_data()
+      latest  <- latest_reports()
+      visible_cids <- if (is.null(visible) || nrow(visible) == 0) character(0) else
+        visible$contribution_id[!is.na(visible$contribution_id)]
+      
+      export_df <- if (length(visible_cids) == 0 || nrow(latest) == 0) {
+        latest[0, ]  # empty, but with the correct columns
+      } else {
+        latest %>% filter(contribution_id %in% visible_cids)
+      }
+      write.xlsx(export_df, file, rowNames = FALSE)
+    }
   )
 }
 
